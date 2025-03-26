@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ruta Musical Tarifa</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <link href="https://cdn.jsdelivr.net/npm/@picocss/pico@1/css/pico.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #2A9D8F;
+            --secondary: #264653;
+            --accent: #E9C46A;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            line-height: 1.6;
+        }
+
+        .hero {
+            background: linear-gradient(rgba(42, 157, 143, 0.9), rgba(38, 70, 83, 0.9)),
+                        url('https://ejemplo.com/header-bg.jpg') center/cover;
+            padding: 4rem 1rem;
+            color: white;
+            text-align: center;
+        }
+
+        #map {
+            height: 500px;
+            border-radius: 15px;
+            margin: 2rem 0;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .grid {
+            display: grid;
+            gap: 1.5rem;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            padding: 2rem;
+        }
+
+        .card {
+            background: white;
+            border-radius: 10px;
+            padding: 1.5rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            transition: transform 0.3s;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+        }
+
+        .artist-modal {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 2rem;
+            border-radius: 10px;
+            max-width: 600px;
+            width: 90%;
+            z-index: 1000;
+        }
+
+        .modal-backdrop {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 999;
+        }
+
+        .artist-image {
+            width: 100%;
+            max-height: 300px;
+            object-fit: cover;
+            border-radius: 8px;
+        }
+    </style>
+</head>
+<body>
+    <nav class="container">
+        <h1>🎵 Ruta Musical Tarifa</h1>
+    </nav>
+
+    <header class="hero">
+        <h2>Vive la música en directo</h2>
+        <p>Descubre los eventos musicales de viernes a domingo</p>
+    </header>
+
+    <main class="container">
+        <div id="map"></div>
+        
+        <div class="grid">
+            <div class="card">
+                <h3>📍 Locales participantes</h3>
+                <div id="locales-list"></div>
+            </div>
+            
+            <div class="card">
+                <h3>🎤 Artistas</h3>
+                <div id="artistas-list"></div>
+            </div>
+        </div>
+    </main>
+
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
+    <script>
+        // Configura Supabase
+        const SUPABASE_URL = 'TU_URL_SUPABASE';
+        const SUPABASE_KEY = 'TU_KEY_PUBLICO';
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        // Elementos del DOM
+        const mapContainer = document.getElementById('map');
+        const localesList = document.getElementById('locales-list');
+        const artistasList = document.getElementById('artistas-list');
+
+        // Cargar todos los datos
+        async function cargarDatos() {
+            const { data: locales } = await supabase.from('locales').select('*');
+            const { data: artistas } = await supabase.from('artistas').select('*');
+            
+            renderizarMapa(locales, artistas);
+            renderizarLocales(locales);
+            renderizarArtistas(artistas);
+        }
+
+        // Renderizar mapa con Leaflet
+        function renderizarMapa(locales, artistas) {
+            const map = L.map('map').setView([36.0139, -5.6030], 14);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+            locales.forEach(local => {
+                const popupContent = `
+                    <h4>${local.nombre}</h4>
+                    <p>${local.direccion}</p>
+                    <h5>Programación:</h5>
+                    ${local.programacion.map(evento => {
+                        const artista = artistas.find(a => a.id === evento.artista_id);
+                        return `
+                            <p>${evento.dia} ${evento.hora}: 
+                                <span class="artista-link" 
+                                      onclick="mostrarArtista(${evento.artista_id})">
+                                    ${artista?.nombre || 'Artista desconocido'}
+                                </span>
+                            </p>`;
+                    }).join('')}
+                `;
+
+                L.marker([local.lat, local.lon])
+                    .addTo(map)
+                    .bindPopup(popupContent);
+            });
+        }
+
+        // Renderizar lista de locales
+        function renderizarLocales(locales) {
+            localesList.innerHTML = locales.map(local => `
+                <article>
+                    <h4>${local.nombre}</h4>
+                    <p>${local.direccion}</p>
+                    ${local.foto_url ? `<img src="${local.foto_url}" alt="${local.nombre}" style="width:100%; height:150px; object-fit:cover; border-radius:8px; margin:10px 0;">` : ''}
+                </article>
+            `).join('');
+        }
+
+        // Renderizar lista de artistas
+        function renderizarArtistas(artistas) {
+            artistasList.innerHTML = artistas.map(artista => `
+                <article onclick="mostrarArtista(${artista.id})" style="cursor:pointer;">
+                    <h4>${artista.nombre}</h4>
+                    <p>${artista.genero}</p>
+                    ${artista.foto_url ? `<img src="${artista.foto_url}" alt="${artista.nombre}" style="width:100%; height:100px; object-fit:cover; border-radius:8px;">` : ''}
+                </article>
+            `).join('');
+        }
+
+        // Mostrar detalle del artista
+        window.mostrarArtista = async function(artistaId) {
+            const { data: artista } = await supabase
+                .from('artistas')
+                .select('*')
+                .eq('id', artistaId)
+                .single();
+
+            const modalHTML = `
+                <div class="modal-backdrop" onclick="cerrarModal()"></div>
+                <div class="artist-modal">
+                    ${artista.foto_url ? `<img src="${artista.foto_url}" class="artist-image" alt="${artista.nombre}">` : ''}
+                    <h2>${artista.nombre}</h2>
+                    <p><strong>Género:</strong> ${artista.genero}</p>
+                    <p>${artista.bio}</p>
+                    ${artista.redes ? `
+                        <div class="redes-sociales">
+                            <h3>Redes Sociales</h3>
+                            ${Object.entries(artista.redes).map(([red, url]) => `
+                                <a href="${url}" target="_blank">${red}</a>
+                            `).join(' ')}
+                        </div>
+                    ` : ''}
+                    <button onclick="cerrarModal()">Cerrar</button>
+                </div>
+            `;
+
+            const modalContainer = document.createElement('div');
+            modalContainer.innerHTML = modalHTML;
+            document.body.appendChild(modalContainer);
+        }
+
+        // Cerrar modal
+        window.cerrarModal = function() {
+            document.querySelectorAll('.modal-backdrop, .artist-modal').forEach(el => el.remove());
+        }
+
+        // Iniciar
+        cargarDatos();
+    </script>
+</body>
+</html>
